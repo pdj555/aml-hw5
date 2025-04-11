@@ -41,7 +41,7 @@ export TF_CPP_MIN_LOG_LEVEL=0
 
 # --- Navigate to your working directory ---
 # !!! IMPORTANT: Replace with the actual absolute path to your homework directory !!!
-WORKDIR="/path/to/your/aml-hw5"  # <<< REPLACE THIS with your actual path
+WORKDIR="/home/cs504313/aml/aml-hw5"  # <<< REPLACE THIS with your actual path
 echo "Changing to directory: ${WORKDIR}"
 cd "${WORKDIR}"
 if [ $? -ne 0 ]; then
