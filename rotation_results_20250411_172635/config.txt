@@ -1,0 +1,8 @@
+# Experiment Configuration
+Date: 2025-04-11 17:26:35
+Results Directory: rotation_results_20250411_172635
+Hidden Layers: 256,128,64,32
+Learning Rate: 0.001
+Dropout: 0.2
+Batch Size: 128
+Epochs: 500
