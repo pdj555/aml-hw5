@@ -245,8 +245,10 @@ def calculate_percentiles(model_outer, inputs, percentiles=[0.1, 0.25, 0.5, 0.75
     for p in percentiles:
         results[p] = distributions.quantile(p).numpy().flatten()
     
-    # Also get the mean
-    results['mean'] = distributions.mean().numpy().flatten()
+    # For SinhArcsinh distribution, mean() is not implemented
+    # Use sampling to estimate the mean instead
+    samples = distributions.sample(1000).numpy()
+    results['mean'] = np.mean(samples, axis=0).flatten()
     
     return results
 
