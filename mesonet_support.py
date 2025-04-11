@@ -145,11 +145,27 @@ class SinhArcsinh():
         - This method is only called when the wrapping lambda distribution is
             called (i.e., when the params are proper TF Tensors)
         '''
+        # Apply stronger constraints on parameters here to ensure valid values
+        # The loc parameter is a real number, so we can leave it as is (params[0])
+        loc = params[0]
+        
+        # Scale must be strictly positive with a reasonable lower bound
+        # Cap the maximum scale to prevent extreme values
+        scale = tf.clip_by_value(tf.math.softplus(params[1]) + 1e-4, 1e-4, 10.0)
+        
+        # Skewness controls the asymmetry of the distribution
+        # Keep it in a reasonable range
+        skewness = tf.clip_by_value(params[2], -3.0, 3.0) 
+        
+        # Tailweight controls the kurtosis
+        # Constrain to reasonable range to prevent numerical issues
+        tailweight = tf.clip_by_value(tf.math.softplus(params[3]) + 1e-4, 1e-4, 5.0)
+        
         return tfd.SinhArcsinh(
-            loc=params[0],
-            scale=params[1],
-            skewness=params[2],
-            tailweight=params[3], 
+            loc=loc,
+            scale=scale,
+            skewness=skewness,
+            tailweight=tailweight, 
         )
 
     # Custom loss function
@@ -164,5 +180,15 @@ class SinhArcsinh():
         :param dist: A TF Probability Distribution
         :return: The negative likelihood of each true value
         '''
-        return -dist.log_prob(y)
+        # Add numerical stability
+        log_prob = dist.log_prob(y)
+        # Clip to prevent extreme values
+        log_prob = tf.clip_by_value(log_prob, -1e6, 1e6)
+        # Replace NaN/Inf values with a high but finite loss
+        log_prob = tf.where(
+            tf.math.is_finite(log_prob),
+            log_prob,
+            tf.ones_like(log_prob) * -1e6
+        )
+        return -log_prob
         
