@@ -1,0 +1,2 @@
+Model architecture: [16, 8]
+Test loss: 2.4792494773864746
