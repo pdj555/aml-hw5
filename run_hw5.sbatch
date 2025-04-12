@@ -43,8 +43,7 @@ export TF_ENABLE_ONEDNN_OPTS=0
 export TF_CPP_MIN_LOG_LEVEL=1  # Suppress some TensorFlow warnings
 
 # --- Navigate to your working directory ---
-# !!! IMPORTANT: Replace with the actual absolute path to your homework directory !!!
-WORKDIR="/home/cs504313/aml/aml-hw5"  # <<< REPLACE THIS with your actual path
+WORKDIR="/home/cs504313/aml/aml-hw5"
 echo "Changing to directory: ${WORKDIR}"
 cd "${WORKDIR}"
 if [ $? -ne 0 ]; then

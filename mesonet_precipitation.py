@@ -557,29 +557,59 @@ def generate_combined_analysis(results_dir):
     for i in range(8):
         rotation_dir = os.path.join(results_dir, f'rotation_{i}')
         if os.path.exists(rotation_dir):
-            # Load history
-            with open(os.path.join(rotation_dir, 'history.pkl'), 'rb') as f:
-                history = pickle.load(f)
+            history_file = os.path.join(rotation_dir, 'history.pkl')
+            params_file = os.path.join(rotation_dir, 'test_parameters.npz')
             
-            # Load parameters
-            params = np.load(os.path.join(rotation_dir, 'test_parameters.npz'))
-            
-            rotation_data.append({
-                'rotation': i,
-                'history': history,
-                'params': params
-            })
+            if os.path.exists(history_file) and os.path.exists(params_file):
+                # Load history
+                with open(history_file, 'rb') as f:
+                    history = pickle.load(f)
+                
+                # Load parameters
+                params = np.load(params_file)
+                
+                # Load results file for MAD values
+                results_file = os.path.join(rotation_dir, 'results.txt')
+                mad_mean = None
+                mad_median = None
+                
+                if os.path.exists(results_file):
+                    with open(results_file, 'r') as f:
+                        lines = f.readlines()
+                        if len(lines) >= 2:
+                            try:
+                                mad_mean = float(lines[0].split(': ')[1])
+                                mad_median = float(lines[1].split(': ')[1])
+                            except:
+                                print(f"Warning: Could not parse MAD values from {results_file}")
+                
+                rotation_data.append({
+                    'rotation': i,
+                    'history': history,
+                    'params': params,
+                    'mad_mean': mad_mean,
+                    'mad_median': mad_median
+                })
     
     if not rotation_data:
-        print("No rotation data found")
+        print("No rotation data found. Make sure all rotations have completed successfully.")
         return {}
     
+    print(f"Found data for {len(rotation_data)} rotations")
     saved_figures = {}
     
-    # Figure 1: Training and validation loss curves
-    # Split into two separate figures as in nat's implementation
+    # FIGURE 0: Copy the inner model architecture from rotation 0
+    model_inner_src = os.path.join(results_dir, 'rotation_0', 'model_inner.png')
+    if os.path.exists(model_inner_src):
+        model_inner_dest = os.path.join(combined_dir, 'figure0_inner_model_architecture.png')
+        import shutil
+        shutil.copy(model_inner_src, model_inner_dest)
+        saved_figures['figure0'] = model_inner_dest
+        print(f"Created Figure 0: {model_inner_dest}")
+    else:
+        print(f"Warning: Could not find inner model architecture at {model_inner_src}")
     
-    # Figure 1a: Training loss
+    # FIGURE 1a: Training loss for all rotations
     plt.figure(figsize=(12, 8))
     for data in rotation_data:
         plt.plot(data['history']['loss'], label=f'Rotation {data["rotation"]}')
@@ -590,11 +620,13 @@ def generate_combined_analysis(results_dir):
     plt.legend()
     plt.tight_layout()
     
-    plt.savefig(os.path.join(combined_dir, 'figure1a_training_loss.png'))
+    figure1a_path = os.path.join(combined_dir, 'figure1a_training_loss.png')
+    plt.savefig(figure1a_path)
     plt.close()
-    saved_figures['figure1a'] = os.path.join(combined_dir, 'figure1a_training_loss.png')
+    saved_figures['figure1a'] = figure1a_path
+    print(f"Created Figure 1a: {figure1a_path}")
     
-    # Figure 1b: Validation loss
+    # FIGURE 1b: Validation loss for all rotations
     plt.figure(figsize=(12, 8))
     for data in rotation_data:
         plt.plot(data['history']['val_loss'], label=f'Rotation {data["rotation"]}')
@@ -605,24 +637,33 @@ def generate_combined_analysis(results_dir):
     plt.legend()
     plt.tight_layout()
     
-    plt.savefig(os.path.join(combined_dir, 'figure1b_validation_loss.png'))
+    figure1b_path = os.path.join(combined_dir, 'figure1b_validation_loss.png')
+    plt.savefig(figure1b_path)
     plt.close()
-    saved_figures['figure1b'] = os.path.join(combined_dir, 'figure1b_validation_loss.png')
+    saved_figures['figure1b'] = figure1b_path
+    print(f"Created Figure 1b: {figure1b_path}")
     
-    # Figure 2: Time series visualization - two versions for comparison
+    # FIGURE 2: Time series visualization
+    # Copy from rotation 0 to maintain consistency
     timeseries_src = os.path.join(results_dir, 'rotation_0', 'station_timeseries.png')
     if os.path.exists(timeseries_src):
-        timeseries_dest = os.path.join(combined_dir, 'figure2_timeseries.png')
+        # Main figure 2
+        figure2_path = os.path.join(combined_dir, 'figure2_timeseries.png')
         import shutil
-        shutil.copy(timeseries_src, timeseries_dest)
-        saved_figures['figure2'] = timeseries_dest
+        shutil.copy(timeseries_src, figure2_path)
+        saved_figures['figure2'] = figure2_path
+        print(f"Created Figure 2: {figure2_path}")
         
-        # Also create an alternative version with a different name
-        timeseries_alt_dest = os.path.join(combined_dir, 'figure2_timeseries_alt.png')
-        shutil.copy(timeseries_src, timeseries_alt_dest)
-        saved_figures['figure2_alt'] = timeseries_alt_dest
+        # Also create an alternative version as in nat's implementation
+        figure2_alt_path = os.path.join(combined_dir, 'figure2_timeseries_alt.png')
+        shutil.copy(timeseries_src, figure2_alt_path)
+        saved_figures['figure2_alt'] = figure2_alt_path
+        print(f"Created Figure 2 (alt): {figure2_alt_path}")
+    else:
+        print(f"Warning: Could not find time series plot at {timeseries_src}")
     
-    # Figure 3: Distribution parameter scatter plots - Split into four separate figures
+    # FIGURE 3: Distribution parameter scatter plots
+    # Combine data from all rotations
     all_observed = []
     all_mean = []
     all_std = []
@@ -653,7 +694,7 @@ def generate_combined_analysis(results_dir):
         all_skewness = all_skewness[indices]
         all_tailweight = all_tailweight[indices]
     
-    # Figure 3a: Mean vs Observed
+    # FIGURE 3a: Mean vs Observed
     plt.figure(figsize=(10, 8))
     plt.scatter(all_observed, all_mean, alpha=0.3, s=3)
     plt.title('Predicted Mean vs Observed Precipitation')
@@ -661,11 +702,14 @@ def generate_combined_analysis(results_dir):
     plt.ylabel('Predicted Mean')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(combined_dir, 'figure3a_mean.png'))
-    plt.close()
-    saved_figures['figure3a'] = os.path.join(combined_dir, 'figure3a_mean.png')
     
-    # Figure 3b: Std Dev vs Observed
+    figure3a_path = os.path.join(combined_dir, 'figure3a_mean.png')
+    plt.savefig(figure3a_path)
+    plt.close()
+    saved_figures['figure3a'] = figure3a_path
+    print(f"Created Figure 3a: {figure3a_path}")
+    
+    # FIGURE 3b: Std Dev vs Observed
     plt.figure(figsize=(10, 8))
     plt.scatter(all_observed, all_std, alpha=0.3, s=3)
     plt.title('Predicted Standard Deviation vs Observed Precipitation')
@@ -673,11 +717,14 @@ def generate_combined_analysis(results_dir):
     plt.ylabel('Predicted Standard Deviation')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(combined_dir, 'figure3b_std.png'))
-    plt.close()
-    saved_figures['figure3b'] = os.path.join(combined_dir, 'figure3b_std.png')
     
-    # Figure 3c: Skewness vs Observed
+    figure3b_path = os.path.join(combined_dir, 'figure3b_std.png')
+    plt.savefig(figure3b_path)
+    plt.close()
+    saved_figures['figure3b'] = figure3b_path
+    print(f"Created Figure 3b: {figure3b_path}")
+    
+    # FIGURE 3c: Skewness vs Observed
     plt.figure(figsize=(10, 8))
     plt.scatter(all_observed, all_skewness, alpha=0.3, s=3)
     plt.title('Predicted Skewness vs Observed Precipitation')
@@ -685,11 +732,14 @@ def generate_combined_analysis(results_dir):
     plt.ylabel('Predicted Skewness')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(combined_dir, 'figure3c_skewness.png'))
-    plt.close()
-    saved_figures['figure3c'] = os.path.join(combined_dir, 'figure3c_skewness.png')
     
-    # Figure 3d: Tailweight vs Observed
+    figure3c_path = os.path.join(combined_dir, 'figure3c_skewness.png')
+    plt.savefig(figure3c_path)
+    plt.close()
+    saved_figures['figure3c'] = figure3c_path
+    print(f"Created Figure 3c: {figure3c_path}")
+    
+    # FIGURE 3d: Tailweight vs Observed
     plt.figure(figsize=(10, 8))
     plt.scatter(all_observed, all_tailweight, alpha=0.3, s=3)
     plt.title('Predicted Tailweight vs Observed Precipitation')
@@ -697,62 +747,94 @@ def generate_combined_analysis(results_dir):
     plt.ylabel('Predicted Tailweight')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(combined_dir, 'figure3d_tailweight.png'))
-    plt.close()
-    saved_figures['figure3d'] = os.path.join(combined_dir, 'figure3d_tailweight.png')
     
-    # Figure 4: MAD comparison bar plot
-    mad_mean = []
-    mad_median = []
+    figure3d_path = os.path.join(combined_dir, 'figure3d_tailweight.png')
+    plt.savefig(figure3d_path)
+    plt.close()
+    saved_figures['figure3d'] = figure3d_path
+    print(f"Created Figure 3d: {figure3d_path}")
+    
+    # FIGURE 4: MAD comparison bar plot
+    # Get MAD values from rotation_data
+    mad_mean_values = []
+    mad_median_values = []
     rotation_indices = []
     
     for data in rotation_data:
-        rotation_dir = os.path.join(results_dir, f'rotation_{data["rotation"]}')
-        with open(os.path.join(rotation_dir, 'results.txt'), 'r') as f:
-            lines = f.readlines()
-            mean_line = lines[0].strip()
-            median_line = lines[1].strip()
-            
-            mad_mean.append(float(mean_line.split(': ')[1]))
-            mad_median.append(float(median_line.split(': ')[1]))
+        if data['mad_mean'] is not None and data['mad_median'] is not None:
+            mad_mean_values.append(data['mad_mean'])
+            mad_median_values.append(data['mad_median'])
             rotation_indices.append(data['rotation'])
     
-    # Sort by rotation index
-    sorted_indices = np.argsort(rotation_indices)
-    rotation_indices = [rotation_indices[i] for i in sorted_indices]
-    mad_mean = [mad_mean[i] for i in sorted_indices]
-    mad_median = [mad_median[i] for i in sorted_indices]
+    if len(mad_mean_values) > 0:
+        # Sort by rotation index
+        sorted_indices = np.argsort(rotation_indices)
+        rotation_indices = [rotation_indices[i] for i in sorted_indices]
+        mad_mean_values = [mad_mean_values[i] for i in sorted_indices]
+        mad_median_values = [mad_median_values[i] for i in sorted_indices]
+        
+        # Create bar plot
+        plt.figure(figsize=(14, 8))
+        
+        bar_width = 0.35
+        x = np.arange(len(rotation_indices))
+        
+        plt.bar(x - bar_width/2, mad_mean_values, bar_width, label='MAD: Observed vs Mean')
+        plt.bar(x + bar_width/2, mad_median_values, bar_width, label='MAD: Observed vs Median')
+        
+        plt.xlabel('Rotation')
+        plt.ylabel('Mean Absolute Difference (MAD)')
+        plt.title('MAD Comparison Across Rotations')
+        plt.xticks(x, [f'Rotation {i}' for i in rotation_indices])
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        figure4_path = os.path.join(combined_dir, 'figure4_mad.png')
+        plt.savefig(figure4_path)
+        plt.close()
+        saved_figures['figure4'] = figure4_path
+        print(f"Created Figure 4: {figure4_path}")
+    else:
+        print("Warning: No MAD values found for Figure 4")
     
-    # Create bar plot
-    plt.figure(figsize=(14, 8))
-    
-    bar_width = 0.35
-    x = np.arange(len(rotation_indices))
-    
-    plt.bar(x - bar_width/2, mad_mean, bar_width, label='MAD: Observed vs Mean')
-    plt.bar(x + bar_width/2, mad_median, bar_width, label='MAD: Observed vs Median')
-    
-    plt.xlabel('Rotation')
-    plt.ylabel('Mean Absolute Difference (MAD)')
-    plt.title('MAD Comparison Across Rotations')
-    plt.xticks(x, [f'Rotation {i}' for i in rotation_indices])
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    
-    plt.savefig(os.path.join(combined_dir, 'figure4_mad.png'))
-    plt.close()
-    saved_figures['figure4'] = os.path.join(combined_dir, 'figure4_mad.png')
-    
-    # Create an updated reflection template using actual MAD values
-    avg_mad_mean = np.mean(mad_mean)
-    avg_mad_median = np.mean(mad_median)
-    
-    reflection = f"""# Reflection: Mesonet Precipitation Prediction
+    # Create an updated reflection template using actual MAD values if available
+    if len(mad_mean_values) > 0:
+        avg_mad_mean = np.mean(mad_mean_values)
+        avg_mad_median = np.mean(mad_median_values)
+        
+        reflection = f"""# Reflection: Mesonet Precipitation Prediction
 
 ## Model Performance Consistency
 
-The model's performance across the 8 rotations shows an average MAD (Mean Absolute Difference) of {avg_mad_median:.6f} for median predictions and {avg_mad_mean:.6f} for mean predictions.
+The model's performance across the {len(rotation_indices)} rotations shows an average MAD (Mean Absolute Difference) of {avg_mad_median:.6f} for median predictions and {avg_mad_mean:.6f} for mean predictions.
+
+[Discuss how consistent your model performance is across the different rotations]
+
+## Probability Density Function Shape
+
+[Based on the time-series plots, describe and explain the shape of the probability density function and how it changes over time]
+
+## Skewness Utilization
+
+[How is skewness utilized by the model? Is there a consistent variation in this parameter?]
+
+## Tailweight Utilization
+
+[How is tailweight utilized by the model? Is there a consistent variation in this parameter?]
+
+## Appropriateness of Sinh-Arcsinh Distribution
+
+[Is the Sinh-Arcsinh distribution appropriate for modeling this phenomenon? Provide a detailed explanation]
+
+## Model Effectiveness
+
+[Are your models effective at predicting precipitation? Justify your answer]
+"""
+    else:
+        reflection = """# Reflection: Mesonet Precipitation Prediction
+
+## Model Performance Consistency
 
 [Discuss how consistent your model performance is across the different rotations]
 
@@ -777,68 +859,52 @@ The model's performance across the 8 rotations shows an average MAD (Mean Absolu
 [Are your models effective at predicting precipitation? Justify your answer]
 """
     
-    with open(os.path.join(results_dir, 'reflection_template.md'), 'w') as f:
+    # Save reflection template
+    reflection_path = os.path.join(results_dir, 'reflection_template.md')
+    with open(reflection_path, 'w') as f:
         f.write(reflection)
-    saved_figures['reflection'] = os.path.join(results_dir, 'reflection_template.md')
-    
-    # Copy the inner model architecture image to combined analysis
-    model_inner_src = os.path.join(results_dir, 'rotation_0', 'model_inner.png')
-    if os.path.exists(model_inner_src):
-        model_inner_dest = os.path.join(combined_dir, 'figure0_inner_model_architecture.png')
-        import shutil
-        shutil.copy(model_inner_src, model_inner_dest)
-        saved_figures['figure0'] = model_inner_dest
+    saved_figures['reflection'] = reflection_path
+    print(f"Created reflection template: {reflection_path}")
     
     return saved_figures
 
 def run_experiments(n_rotations=8, epochs=500, batch_size=128):
     """
-    Run the complete experiment suite across multiple rotations
+    Run a series of experiments with different rotations
     
     Parameters:
     -----------
     n_rotations : int
         Number of rotations to run
     epochs : int
-        Number of epochs for each training run
+        Number of epochs for training
     batch_size : int
         Batch size for training
         
     Returns:
     --------
     tuple
-        Results of the experiments and generated figures
+        results_dir, all_rotation_results, combined_figures
     """
-    # Create a directory for all results with timestamp
+    print(f"Running {n_rotations} rotations with {epochs} epochs and batch size {batch_size}")
+    
+    # Create results directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir = f"rotation_results_{timestamp}"
     os.makedirs(results_dir, exist_ok=True)
     
-    # Save configuration details
-    config = f"""# Experiment Configuration
-Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-Results Directory: {results_dir}
-Hidden Layers: 256,128,64,32
-Learning Rate: 0.001
-Dropout: 0.2
-Batch Size: {batch_size}
-Epochs: {epochs}
-"""
-    with open(os.path.join(results_dir, 'config.txt'), 'w') as f:
-        f.write(config)
-    
-    # Lists to store results
+    # Store results for each rotation
     all_rotation_results = []
     
-    # Run for each rotation
+    # Run each rotation
     for rotation in range(n_rotations):
-        print(f"Starting rotation {rotation}...")
+        print(f"\n{'='*70}\nRotation {rotation}\n{'='*70}")
         
-        # Create rotation-specific directory
+        # Create directory for this rotation
         rotation_dir = os.path.join(results_dir, f"rotation_{rotation}")
         os.makedirs(rotation_dir, exist_ok=True)
         
-        # Train models for this rotation
+        # Train models
         model_inner, model_outer, history, test_data = train_models(
             rotation=rotation,
             epochs=epochs,
@@ -846,28 +912,158 @@ Epochs: {epochs}
             verbose=1
         )
         
-        # Save rotation-specific data and plots
-        rotation_results = save_rotation_data(
-            rotation=rotation,
-            model_inner=model_inner,
-            model_outer=model_outer,
-            history=history,
-            test_data=test_data,
-            output_dir=rotation_dir
+        # Create inner model visualization
+        try:
+            # Generate a visualization of the inner model architecture
+            inner_model_path = os.path.join(rotation_dir, "model_inner.png")
+            plot_model(model_inner, to_file=inner_model_path, show_shapes=True, show_layer_names=True)
+            print(f"Inner model architecture saved to {inner_model_path}")
+        except Exception as e:
+            print(f"Warning: Could not generate model visualization: {str(e)}")
+        
+        # Plot training history
+        plt.figure(figsize=(12, 8))
+        plt.plot(history.history['loss'], label='Training Loss')
+        plt.plot(history.history['val_loss'], label='Validation Loss')
+        plt.title(f'Model Loss - Rotation {rotation}')
+        plt.ylabel('Loss (Negative Log Likelihood)')
+        plt.xlabel('Epoch')
+        plt.legend()
+        plt.grid(True)
+        
+        history_path = os.path.join(rotation_dir, "training_history.png")
+        plt.savefig(history_path)
+        plt.close()
+        print(f"Training history plot saved to {history_path}")
+        
+        # Save history for later analysis
+        with open(os.path.join(rotation_dir, "history.pkl"), "wb") as f:
+            pickle.dump(history.history, f)
+        
+        # Generate predictions for test data
+        ins_test, outs_test = test_data
+        
+        # Extract distribution parameters for test data
+        mean, std_dev, skewness, tailweight = predict_distribution_params(model_inner, ins_test)
+        
+        # Save parameters for later analysis
+        np.savez(
+            os.path.join(rotation_dir, "test_parameters.npz"),
+            mean=mean,
+            std_dev=std_dev,
+            skewness=skewness,
+            tailweight=tailweight,
+            actual=outs_test
         )
         
-        all_rotation_results.append(rotation_results)
+        # Calculate percentiles for visualization
+        distribution_outputs = calculate_percentiles(model_outer, ins_test)
         
-        print(f"Rotation {rotation} completed.")
-        print(f"MAD (Mean): {rotation_results['mad_mean']:.6f}")
-        print(f"MAD (Median): {rotation_results['mad_median']:.6f}")
-        print("-" * 50)
+        # Calculate MAD for mean and median
+        mad_mean = calculate_mad(outs_test, mean)
+        mad_median = calculate_mad(outs_test, distribution_outputs['p50'])  # 50th percentile = median
+        
+        # Save results
+        with open(os.path.join(rotation_dir, "results.txt"), "w") as f:
+            f.write(f"MAD (Mean): {mad_mean}\n")
+            f.write(f"MAD (Median): {mad_median}\n")
+        
+        # Extract a station time series for visualization
+        station_ins, station_outs = extract_station_data(rotation)
+        
+        # Predict for this station
+        station_mean, station_std, station_skew, station_tail = predict_distribution_params(model_inner, station_ins)
+        station_percentiles = calculate_percentiles(model_outer, station_ins)
+        
+        # Plot time series with percentiles
+        plt.figure(figsize=(15, 8))
+        time_index = np.arange(len(station_outs))
+        
+        # Plot observed values
+        plt.plot(time_index, station_outs, 'k-', label='Observed Precipitation', linewidth=2)
+        
+        # Plot mean prediction
+        plt.plot(time_index, station_mean, 'r-', label='Mean Prediction', linewidth=1.5)
+        
+        # Plot percentiles
+        plt.fill_between(time_index, station_percentiles['p10'], station_percentiles['p90'], 
+                         color='blue', alpha=0.2, label='10-90 Percentile Range')
+        plt.fill_between(time_index, station_percentiles['p25'], station_percentiles['p75'], 
+                         color='blue', alpha=0.3, label='25-75 Percentile Range')
+        
+        plt.title(f'Precipitation Time Series with Predicted Distribution - Rotation {rotation}')
+        plt.xlabel('Time (Days)')
+        plt.ylabel('Precipitation')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        station_path = os.path.join(rotation_dir, "station_timeseries.png")
+        plt.savefig(station_path)
+        plt.close()
+        print(f"Station time series plot saved to {station_path}")
+        
+        # Plot distribution parameters against precipitation
+        plt.figure(figsize=(14, 10))
+        
+        plt.subplot(2, 2, 1)
+        plt.scatter(outs_test, mean, alpha=0.3, s=5)
+        plt.title('Mean vs Precipitation')
+        plt.xlabel('Observed Precipitation')
+        plt.ylabel('Predicted Mean')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(2, 2, 2)
+        plt.scatter(outs_test, std_dev, alpha=0.3, s=5)
+        plt.title('Standard Deviation vs Precipitation')
+        plt.xlabel('Observed Precipitation')
+        plt.ylabel('Predicted Standard Deviation')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(2, 2, 3)
+        plt.scatter(outs_test, skewness, alpha=0.3, s=5)
+        plt.title('Skewness vs Precipitation')
+        plt.xlabel('Observed Precipitation')
+        plt.ylabel('Predicted Skewness')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(2, 2, 4)
+        plt.scatter(outs_test, tailweight, alpha=0.3, s=5)
+        plt.title('Tailweight vs Precipitation')
+        plt.xlabel('Observed Precipitation')
+        plt.ylabel('Predicted Tailweight')
+        plt.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        params_path = os.path.join(rotation_dir, "distribution_parameters.png")
+        plt.savefig(params_path)
+        plt.close()
+        print(f"Distribution parameters plot saved to {params_path}")
+        
+        # Save rotation results
+        rotation_result = {
+            'rotation': rotation,
+            'model_inner': model_inner,
+            'model_outer': model_outer,
+            'history': history.history,
+            'test_data': test_data,
+            'mean': mean,
+            'std_dev': std_dev,
+            'skewness': skewness, 
+            'tailweight': tailweight,
+            'mad_mean': mad_mean,
+            'mad_median': mad_median,
+            'percentiles': distribution_outputs
+        }
+        
+        all_rotation_results.append(rotation_result)
+        
+        print(f"Rotation {rotation} completed")
     
     # Generate combined analysis
-    print("Generating combined analysis...")
+    print("\nGenerating combined analysis...")
     combined_figures = generate_combined_analysis(results_dir)
     
-    print("All experiments completed successfully!")
+    print("All rotations completed")
     return results_dir, all_rotation_results, combined_figures
 
 def main():
@@ -878,9 +1074,6 @@ def main():
     # Set random seed for reproducibility
     np.random.seed(42)
     tf.random.set_seed(42)
-    
-    # Disable GPU for compatibility
-    tf.config.set_visible_devices([], 'GPU')
     
     # Run the experiments
     results_dir, all_rotation_results, combined_figures = run_experiments(
