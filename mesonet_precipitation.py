@@ -524,8 +524,10 @@ def run_single_rotation(args):
     for p in percentiles:
         percentile_values[p] = predicted_distribution.quantile(p*tf.ones(station_ins.shape[0], dtype=tf.float32)).numpy().flatten()
     
-    # Also get the mean
-    mean_pred = predicted_distribution.mean().numpy().flatten()
+    # Use sampling to approximate the mean instead of calling mean() directly
+    # Sample from the distribution to get an approximation of the mean
+    samples = predicted_distribution.sample(1000).numpy()
+    mean_pred = np.mean(samples, axis=0).flatten()
     
     # Plot station time series with percentiles
     plt.figure(figsize=(15, 8))
@@ -595,6 +597,9 @@ def run_single_rotation(args):
             # Sample from the distribution
             samples = pred_dist.sample(1000).numpy().flatten()
             
+            # Calculate mean from samples
+            sample_mean = np.mean(samples)
+            
             # Use the safe plotting function
             plt.subplot(n_samples, 1, i+1)
             safe_plot_histogram(
@@ -603,7 +608,7 @@ def run_single_rotation(args):
                 title=f'Precipitation Distribution for Day {idx}',
                 xlabel='Precipitation (mm)',
                 actual=actual,
-                mean=pred_dist.mean().numpy().flatten()[0],
+                mean=sample_mean,  # Use calculated mean from samples
                 debug=args.debug
             )
         except Exception as e:
@@ -660,13 +665,13 @@ def run_single_rotation(args):
     plt.savefig(os.path.join(args.output_dir, 'distribution_parameters.png'))
     plt.close()
     
-    # Calculate MAD for mean and median
-    # Mean MAD
-    mean_mad = np.mean(np.abs(outs_testing - loc))
+    # For mean MAD, we need to generate samples to approximate the mean
+    predicted_distribution_all = model_outer(ins_testing)
+    samples_all = predicted_distribution_all.sample(1000).numpy()
+    mean_pred_all = np.mean(samples_all, axis=0)
+    mean_mad = np.mean(np.abs(outs_testing - mean_pred_all))
     
     # For median, use the 50th percentile
-    # First get the median for all test points
-    predicted_distribution_all = model_outer(ins_testing)
     median_pred = predicted_distribution_all.quantile(0.5*tf.ones(ins_testing.shape[0], dtype=tf.float32)).numpy()
     median_mad = np.mean(np.abs(outs_testing - median_pred))
     
